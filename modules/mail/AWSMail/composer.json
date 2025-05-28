@@ -1,0 +1,12 @@
+{
+    "name": "joshua/whmcs-aws-ses",
+    "require": {
+        "aws/aws-sdk-php": "^3.343"
+    },
+    "authors": [
+        {
+            "name": "Joshua Pack",
+            "email": "joshua@joshuapack.com"
+        }
+    ]
+}

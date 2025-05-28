@@ -112,17 +112,33 @@ class AWSMail implements SenderModuleInterface
         $subject = $message->getSubject();
         $body = $message->getBody();
         $plainTextBody = $message->getPlainText();
-
-        // TODO: add replyto support
-        $replyTo = '';
-        if ($message->getReplyTo()) {
-            $replyTo = $message->getReplyTo()['name'] . ' <' . $message->getReplyTo()['email'] . '>';
-        }
-
         $destinations = [];
         $fromSend = $message->getFromName() . ' <' . $message->getFromEmail() . '>';
         $subject = $message->getSubject();
         $attachments = [];
+        $messageArray = [
+            'Source' => $fromSend,
+            'Message' => [
+                'Subject' => [
+                    'Data' => $subject,
+                ],
+                'Body' => [
+                    'Text' => [
+                        'Data' => $plainTextBody,
+                    ],
+                    'Html' => [
+                        'Data' => $body,
+                    ],
+                ],
+            ],
+        ];
+
+
+
+        // set replyto if available
+        if ($message->getReplyTo()) {
+            $destinations['ReplyToAddresses'][] = $message->getReplyTo()['name'] . ' <' . $message->getReplyTo()['email'] . '>';
+        }
         
         // Set recipients
         foreach ($message->getRecipients('to') as $to) {
@@ -135,18 +151,22 @@ class AWSMail implements SenderModuleInterface
             $destinations['BccAddresses'][] = $to[1] . ' <' . $to[0] . '>';
         }
 
+        if (!empty($destinations)) {
+            $messageArray['Destination'] = $destinations;
+        } else {
+            throw new SendFailure('No recipients specified for the email.');
+        }
+
         // Set attachments
         foreach ($message->getAttachments() as $attachment) {
             if (array_key_exists('data', $attachment)) {
                 $attachments[] = [
-                    'ContentType' => 'text/plain',
                     'ContentDisposition' => 'ATTACHMENT',
                     'Filename' => $attachment['filename'],
                     'RawContent' => base64_encode($attachment['data']),
                 ];
             } else {
                 $attachments[] = [
-                    'ContentType' => 'text/plain',
                     'ContentDisposition' => 'ATTACHMENT',
                     'Filename' => $attachment['filename'],
                     'RawContent' => base64_encode(file_get_contents($attachment['filepath'])),
@@ -154,26 +174,14 @@ class AWSMail implements SenderModuleInterface
             }
         }
 
+        // Attachments are not directly supported in AWS SES sendEmail API.
+        if (!empty($attachments)) {
+            // $messageArray['Message']['Attachments'] = $attachments;
+        }
+
         // Send the message and get the result
         try {
-            $result = $client->sendEmail([
-                'Source' => $fromSend,
-                'Destination' => $destinations,
-                'Message' => [
-                    'Subject' => [
-                        'Data' => $subject,
-                    ],
-                    'Body' => [
-                        'Text' => [
-                            'Data' => $plainTextBody,
-                        ],
-                        'Html' => [
-                            'Data' => $body,
-                        ],
-                    ],
-                ],
-                'Attachments' => $attachments,
-            ]);
+            $result = $client->sendEmail($messageArray);
         } catch (AwsException $e) {
             throw new InvalidConfiguration('Failed to send AWS SES email: ' . $e->getMessage());
         }

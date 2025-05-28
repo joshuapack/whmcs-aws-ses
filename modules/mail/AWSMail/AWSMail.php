@@ -113,17 +113,27 @@ class AWSMail implements SenderModuleInterface
         $body = $message->getBody();
         $plainTextBody = $message->getPlainText();
 
+        // TODO: add replyto support
         $replyTo = '';
         if ($message->getReplyTo()) {
-            $replyTo = $message->getReplyTo();
+            $replyTo = $message->getReplyTo()['name'] . ' <' . $message->getReplyTo()['email'] . '>';
         }
 
-        $toSend = $message->getTo();
-        $ccSend = $message->getCc();
-        $bccSend = $message->getBcc();
+        $destinations = [];
         $fromSend = $message->getFromName() . ' <' . $message->getFromEmail() . '>';
         $subject = $message->getSubject();
         $attachments = [];
+        
+        // Set recipients
+        foreach ($message->getRecipients('to') as $to) {
+            $destinations['ToAddresses'][] = $to[1] . ' <' . $to[0] . '>';
+        }
+        foreach ($message->getRecipients('cc') as $to) {
+            $destinations['CcAddresses'][] = $to[1] . ' <' . $to[0] . '>';
+        }
+        foreach ($message->getRecipients('bcc') as $to) {
+            $destinations['BccAddresses'][] = $to[1] . ' <' . $to[0] . '>';
+        }
 
         // Set attachments
         foreach ($message->getAttachments() as $attachment) {
@@ -148,11 +158,7 @@ class AWSMail implements SenderModuleInterface
         try {
             $result = $client->sendEmail([
                 'Source' => $fromSend,
-                'Destination' => [
-                    'ToAddresses' => $toSend,
-                    'CcAddresses' => $ccSend,
-                    'BccAddresses' => $bccSend,
-                ],
+                'Destination' => $destinations,
                 'Message' => [
                     'Subject' => [
                         'Data' => $subject,
@@ -166,7 +172,6 @@ class AWSMail implements SenderModuleInterface
                         ],
                     ],
                 ],
-                'ReplyToAddresses' => [$replyTo],
                 'Attachments' => $attachments,
             ]);
         } catch (AwsException $e) {
